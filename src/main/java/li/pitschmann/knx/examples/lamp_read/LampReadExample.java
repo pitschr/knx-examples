@@ -33,8 +33,6 @@ public final class LampReadExample {
 
         // create KNX client and connect to KNX Net/IP device using auto-discovery
         try (final var client = DefaultKnxClient.createStarted()) {
-
-
             // send a 'read' request to KNX
             client.readRequest(readGroupAddress);
 

@@ -44,7 +44,7 @@ public final class LampWriteExample {
                 // translate the human-friendly text into a KNX compatible data point value of DPT 1.001
                 // and send to the KNX actuator
                 var knxValue = DataPointRegistry.getDataPointType(dpt).of(value);
-                client.writeRequest(writeGroupAddress, knxValue);
+                client.writeRequest(writeGroupAddress, knxValue, 10_000);
 
                 System.out.println("Lamp status sent: " + value);
                 Sleeper.seconds(1);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Pitschmann Christoph
+ * Copyright (C) 2022 Pitschmann Christoph
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,9 +20,14 @@ package li.pitschmann.knx.examples.lamp_toggle;
 import li.pitschmann.knx.core.address.GroupAddress;
 import li.pitschmann.knx.core.communication.DefaultKnxClient;
 import li.pitschmann.knx.core.datapoint.DPT1;
+import li.pitschmann.knx.core.exceptions.KnxException;
+
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
- * Example Two: Inverse Lamp Status
+ * Example Two: Inverse Lamp Status using Lambda
  * <p>
  * If the lamp is <strong>on</strong>, the lamp should be <strong>off</strong>.<br>
  * If the lamp is <strong>off</strong>, the lamp should be <strong>on</strong>.<br>
@@ -33,8 +38,8 @@ import li.pitschmann.knx.core.datapoint.DPT1;
  *
  * @author PITSCHR
  */
-public final class LampToggleExample {
-    public static void main(final String[] args) {
+public class LampToggleLambdaExample {
+    public static void main(final String[] args) throws ExecutionException, InterruptedException, TimeoutException {
         // this is the group address where the KNX actuator returns the status of lamp
         final var readGroupAddress = GroupAddress.of(1, 2, 113);
 
@@ -44,16 +49,27 @@ public final class LampToggleExample {
         // create KNX client and connect to KNX Net/IP device using auto-discovery
         try (final var client = DefaultKnxClient.createStarted()) {
             // send a 'read' request to KNX
-            client.readRequest(readGroupAddress);
-
-            // KNX actuator will send a response to the KNX client with actual lamp status
-            final var lampStatus = client.getStatusPool().getValue(readGroupAddress, DPT1.SWITCH).getValue();
-
-            // lamp status will be inverted (on -> off / off -> on)
-            final var lampStatusInverted = !lampStatus;
-
-            // send a 'write' request to KNX and wait 10 sec for ack
-            client.writeRequest(writeGroupAddress, DPT1.SWITCH.of(lampStatusInverted), 10_000);
+            client.readRequest(readGroupAddress)
+                    // KNX actuator will send a response to the KNX client with actual lamp status
+                    .thenApply(ok -> {
+                        if (ok) {
+                            return client.getStatusPool().getValue(readGroupAddress, DPT1.SWITCH).getValue();
+                        } else {
+                            throw new KnxException("Could not read status from lamp");
+                        }
+                    })
+                    // lamp status will be inverted (on -> off / off -> on)
+                    .thenApply(lampStatus -> {
+                        final var lampStatusInverted = !lampStatus;
+                        System.out.println("Lamp Inverted from '" + DPT1.SWITCH.of(lampStatus).getText()
+                                + "' to '" + DPT1.SWITCH.of(lampStatusInverted).getText() + "'");
+                        return lampStatusInverted;
+                    })
+                    // send a 'write' request to KNX
+                    .thenAccept(lampStatusInverted ->
+                            client.writeRequest(writeGroupAddress, DPT1.SWITCH.of(lampStatusInverted)))
+                    // wait max. 10 sec for an acknowledgment
+                    .get(10, TimeUnit.SECONDS);
         }
 
         // auto-closed and disconnected by KNX client
